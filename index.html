@@ -110,6 +110,20 @@
     .btn:hover{transform:translateY(-2px); box-shadow:0 14px 28px rgba(114,91,69,.08)}
     .btn-primary{background:linear-gradient(180deg, #e67064 0%, #d85f55 100%); color:#fff}
     .btn-secondary{background:rgba(255,252,247,.96); border-color:#e7d8c8; color:#49678f}
+    /* Takvim seçim menüsü */
+    .calendar-picker{position:relative;display:flex;}
+    .calendar-picker .btn{width:100%;}
+    .calendar-menu{position:absolute;z-index:30;top:calc(100% + 12px);right:0;width:min(350px,calc(100vw - 32px));background:#fffdf9;border:1px solid var(--stroke);border-radius:22px;padding:16px;box-shadow:0 18px 46px rgba(53,66,82,.18);text-align:left;}
+    .calendar-menu[hidden]{display:none;}
+    .calendar-menu-title{font-weight:700;color:var(--ink);margin-bottom:4px;}
+    .calendar-menu-caption{font-size:13px;color:var(--muted);margin-bottom:12px;}
+    .calendar-option{display:flex;align-items:center;gap:12px;width:100%;text-align:left;border:1px solid #e8dace;background:#fff;border-radius:15px;padding:12px 14px;color:var(--ink);cursor:pointer;margin-top:9px;min-height:64px;box-shadow:none;font:inherit;}
+    .calendar-option:hover,.calendar-option:focus-visible{background:#f3f7fa;border-color:#a9c9dc;}
+    .calendar-option-icon{font-size:25px;flex:none;}
+    .calendar-option-text{display:flex;flex-direction:column;gap:2px;}
+    .calendar-option-text strong{font-size:15px;line-height:1.2;}
+    .calendar-option-text small{color:var(--muted);font-size:12px;line-height:1.35;}
+    .calendar-menu-footnote{font-size:12px;line-height:1.5;color:var(--muted);margin-top:12px;}
 
     .rsvp-text{text-align:center; color:#566579; font-size:17px; margin:-4px 0 22px}
     .form-card{max-width:720px; margin:0 auto; background:rgba(255,253,248,.95); border:1px solid var(--stroke); border-radius:30px; box-shadow:var(--shadow); padding:26px 24px 22px}
@@ -161,6 +175,8 @@
       .info-box{padding:18px 14px}
       .actions{gap:12px}
       .btn{width:100%}
+      .calendar-picker{width:100%;}
+      .calendar-menu{left:0;right:auto;width:100%;}
       .form-card{padding:20px 16px 18px; border-radius:24px}
       .choice-group,.counts-grid{grid-template-columns:1fr}
       .balloon{display:none}
@@ -223,7 +239,22 @@
       </div>
       <div class="actions">
         <a class="btn btn-primary" href="https://www.google.com/maps/search/?api=1&amp;query=5inch%20Meram%20Restoran%20Hacigiden%20Sokak%2046%20Konya" target="_blank" rel="noopener noreferrer">📍 Yol Tarifi Al</a>
-        <button class="btn btn-secondary" id="calendarButton" type="button">🗓️ Takvime Ekle</button>
+        <div class="calendar-picker" id="calendarPicker">
+          <button class="btn btn-secondary" id="calendarButton" type="button" aria-expanded="false" aria-controls="calendarMenu" aria-haspopup="true">🗓️ Takvime Ekle</button>
+          <div class="calendar-menu" id="calendarMenu" hidden>
+            <p class="calendar-menu-title">Takvimini seç</p>
+            <p class="calendar-menu-caption">Kutlama bilgileri otomatik doldurulacak.</p>
+            <a class="calendar-option" id="googleCalendarLink" href="https://calendar.google.com/calendar/" target="_blank" rel="noopener noreferrer">
+              <span class="calendar-option-icon" aria-hidden="true">📅</span>
+              <span class="calendar-option-text"><strong>Google Takvim</strong><small>Etkinliği aç ve kaydet</small></span>
+            </a>
+            <button class="calendar-option" id="icsCalendarButton" type="button">
+              <span class="calendar-option-icon" aria-hidden="true">📱</span>
+              <span class="calendar-option-text"><strong>Apple / Telefon Takvimi</strong><small>.ics takvim dosyası</small></span>
+            </button>
+            <p class="calendar-menu-footnote">Apple ve diğer takvimlerde dosya indirilebilir; açıp etkinliği kaydedebilirsin.</p>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -286,286 +317,82 @@
 
     const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx2PPirjlG8LXGBQGeJ_8qshe0_s_B-g8j1ODOtjxgFESTXvMjGSWhNki4MQHCKyrtE/exec";
     const EVENT = {
-      name: "Aras'ın 1. Yaş Doğum Günü",
+      name: "Selçuk Aras 1 Yaşında!",
       start: '2026-11-14T14:30:00+03:00',
+      end: '2026-11-14T16:30:00+03:00',
       venue: '5inch Meram Restoran',
       address: 'Durunday Mahallesi, Hacıgiden Sokak No:46, Meram/Konya'
     };
     const $ = id => document.getElementById(id);
 
-    
-    // Google Takvim ve Apple / Telefon Takvimi seçim menüsü
-    (() => {
-      const button = $('calendarButton');
-      const picker = document.createElement('div');
-      picker.className = 'calendar-picker';
+    // Seçilen takvim için etkinliği hazırla. Saatler Türkiye saatidir (UTC+03:00).
+    const calendarPicker = $('calendarPicker');
+    const calendarButton = $('calendarButton');
+    const calendarMenu = $('calendarMenu');
+    const googleCalendarLink = $('googleCalendarLink');
 
-      button.parentNode.insertBefore(picker, button);
-      picker.appendChild(button);
-
-      button.setAttribute('aria-expanded', 'false');
-      button.setAttribute('aria-controls', 'calendarMenu');
-
-      const menu = document.createElement('div');
-      menu.id = 'calendarMenu';
-      menu.className = 'calendar-menu';
-      menu.hidden = true;
-
-      menu.innerHTML = `
-        <p class="calendar-menu-title">Takvimini seç</p>
-        <p class="calendar-menu-desc">
-          Etkinlik bilgileri hazır gelecek.
-        </p>
-
-        <a id="googleCalendarLink"
-           class="calendar-choice"
-           target="_blank"
-           rel="noopener noreferrer">
-          <span>📅</span>
-          <span>
-            <strong>Google Takvim</strong>
-            <small>Etkinliği aç ve kaydet</small>
-          </span>
-        </a>
-
-        <button id="phoneCalendarButton"
-                class="calendar-choice"
-                type="button">
-          <span>📱</span>
-          <span>
-            <strong>Apple / Telefon Takvimi</strong>
-            <small>Takvim dosyası (.ics)</small>
-          </span>
-        </button>
-
-        <p class="calendar-menu-desc calendar-menu-note">
-          Bazı telefonlar takvim dosyasını önce indirir.
-        </p>
-      `;
-
-      picker.appendChild(menu);
-
-      // Menünün davetiye tasarımına uygun görünümü
-      const style = document.createElement('style');
-
-      style.textContent = `
-        .calendar-picker {
-          position: relative;
-          display: flex;
-        }
-
-        .calendar-menu {
-          position: absolute;
-          top: calc(100% + 12px);
-          right: 0;
-          z-index: 30;
-          width: min(350px, calc(100vw - 32px));
-          padding: 16px;
-          border: 1px solid #ecdcc8;
-          border-radius: 22px;
-          background: #fffdf9;
-          box-shadow: 0 18px 46px rgba(53,66,82,.18);
-        }
-
-        .calendar-menu[hidden] {
-          display: none;
-        }
-
-        .calendar-menu-title {
-          font-weight: 700;
-          margin: 0 0 4px;
-          color: #2f4154;
-        }
-
-        .calendar-menu-desc {
-          font-size: 13px;
-          color: #69778a;
-          margin: 0 0 12px;
-        }
-
-        .calendar-menu-note {
-          font-size: 12px;
-          margin: 12px 0 0;
-        }
-
-        .calendar-choice {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          width: 100%;
-          min-height: 64px;
-          margin-top: 9px;
-          padding: 12px 14px;
-          text-align: left;
-          text-decoration: none;
-          font: inherit;
-          color: #2f4154;
-          background: #fff;
-          border: 1px solid #e8dace;
-          border-radius: 15px;
-          box-shadow: none;
-          cursor: pointer;
-        }
-
-        .calendar-choice:hover,
-        .calendar-choice:focus-visible {
-          background: #f3f7fa;
-          border-color: #a9c9dc;
-        }
-
-        .calendar-choice > span:first-child {
-          font-size: 25px;
-        }
-
-        .calendar-choice strong,
-        .calendar-choice small {
-          display: block;
-        }
-
-        .calendar-choice strong {
-          font-size: 15px;
-        }
-
-        .calendar-choice small {
-          font-size: 12px;
-          color: #69778a;
-        }
-
-        @media (max-width: 640px) {
-          .calendar-picker {
-            width: 100%;
-          }
-
-          .calendar-picker > .btn {
-            width: 100%;
-          }
-
-          .calendar-menu {
-            left: 0;
-            right: auto;
-            width: 100%;
-          }
-        }
-      `;
-
-      document.head.appendChild(style);
-
-      // Kutlama: 14 Kasım 2026, 14.30-16.30
-      const title = 'Selçuk Aras 1 Yaşında!';
-      const start = new Date(EVENT.start);
-      const end = new Date(
-        start.getTime() + 2 * 60 * 60 * 1000
-      );
-
-      const utc = date => date.toISOString()
+    function formatCalendarUtc(dateString) {
+      return new Date(dateString).toISOString()
         .replace(/[-:]/g, '')
         .replace(/\.\d{3}Z$/, 'Z');
+    }
 
-      // Google Takvim bağlantısı
-      const googleUrl = new URL(
-        'https://calendar.google.com/calendar/render'
-      );
+    const googleUrl = new URL('https://calendar.google.com/calendar/render');
+    googleUrl.searchParams.set('action', 'TEMPLATE');
+    googleUrl.searchParams.set('text', EVENT.name);
+    googleUrl.searchParams.set('dates', formatCalendarUtc(EVENT.start) + '/' + formatCalendarUtc(EVENT.end));
+    googleUrl.searchParams.set('ctz', 'Europe/Istanbul');
+    googleUrl.searchParams.set('location', EVENT.venue + ' - ' + EVENT.address);
+    googleUrl.searchParams.set('details', "Aras'ın 1. yaş kutlamasına davetlisiniz!");
+    googleCalendarLink.href = googleUrl.toString();
 
-      googleUrl.searchParams.set('action', 'TEMPLATE');
-      googleUrl.searchParams.set('text', title);
-      googleUrl.searchParams.set(
-        'dates',
-        utc(start) + '/' + utc(end)
-      );
-      googleUrl.searchParams.set('ctz', 'Europe/Istanbul');
-      googleUrl.searchParams.set(
-        'location',
-        EVENT.venue + ' - ' + EVENT.address
-      );
-      googleUrl.searchParams.set(
-        'details',
-        "Aras'ın 1. yaş kutlamasına davetlisiniz!"
-      );
+    function setCalendarMenu(open) {
+      calendarMenu.hidden = !open;
+      calendarButton.setAttribute('aria-expanded', String(open));
+    }
 
-      menu.querySelector('#googleCalendarLink').href =
-        googleUrl.toString();
+    calendarButton.addEventListener('click', () => {
+      const open = calendarMenu.hidden;
+      setCalendarMenu(open);
+      if (open) googleCalendarLink.focus();
+    });
+    googleCalendarLink.addEventListener('click', () => setCalendarMenu(false));
+    document.addEventListener('click', event => {
+      if (!calendarPicker.contains(event.target)) setCalendarMenu(false);
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && !calendarMenu.hidden) {
+        setCalendarMenu(false);
+        calendarButton.focus();
+      }
+    });
 
-      const closeMenu = () => {
-        menu.hidden = true;
-        button.setAttribute('aria-expanded', 'false');
-      };
-
-      // Takvim menüsünü aç/kapat
-      button.addEventListener('click', () => {
-        menu.hidden = !menu.hidden;
-        button.setAttribute(
-          'aria-expanded',
-          String(!menu.hidden)
-        );
-      });
-
-      menu.querySelector('#googleCalendarLink')
-        .addEventListener('click', closeMenu);
-
-      document.addEventListener('click', event => {
-        if (!picker.contains(event.target)) closeMenu();
-      });
-
-      document.addEventListener('keydown', event => {
-        if (event.key === 'Escape') closeMenu();
-      });
-
-      // Apple ve diğer telefon takvimleri için ICS
-      menu.querySelector('#phoneCalendarButton')
-        .addEventListener('click', () => {
-
-        const escapeIcs = value => String(value)
-          .replace(/\\/g, '\\\\')
-          .replace(/,/g, '\\,')
-          .replace(/;/g, '\\;')
-          .replace(/\n/g, '\\n');
-
-        const lines = [
-          'BEGIN:VCALENDAR',
-          'VERSION:2.0',
-          'CALSCALE:GREGORIAN',
-          'PRODID:-//Aras 1 Yas//TR',
-          'BEGIN:VEVENT',
-          'UID:aras-1-yas-20261114@davet',
-          'DTSTAMP:' + utc(new Date()),
-          'DTSTART:' + utc(start),
-          'DTEND:' + utc(end),
-          'SUMMARY:' + escapeIcs(title),
-          'LOCATION:' + escapeIcs(
-            EVENT.venue + ' - ' + EVENT.address
-          ),
-          'DESCRIPTION:' + escapeIcs(
-            "Aras'ın 1. yaş kutlamasına davetlisiniz!"
-          ),
-          'BEGIN:VALARM',
-          'ACTION:DISPLAY',
-          'DESCRIPTION:Doğum günü hatırlatması',
-          'TRIGGER:-PT1H',
-          'END:VALARM',
-          'END:VEVENT',
-          'END:VCALENDAR'
-        ];
-
-        const url = URL.createObjectURL(
-          new Blob(
-            [lines.join('\r\n') + '\r\n'],
-            { type: 'text/calendar;charset=utf-8' }
-          )
-        );
-
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'selcuk-aras-1-yas.ics';
-
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
-        closeMenu();
-      });
-    })();
-
+    $('icsCalendarButton').addEventListener('click', () => {
+      const start = formatCalendarUtc(EVENT.start);
+      const end = formatCalendarUtc(EVENT.end);
+      const stamp = formatCalendarUtc(new Date().toISOString());
+      const escapeIcs = value => value.replace(/\\/g, '\\\\').replace(/,/g, '\\,').replace(/;/g, '\\;').replace(/\n/g, '\\n');
+      const lines = [
+        'BEGIN:VCALENDAR', 'VERSION:2.0', 'CALSCALE:GREGORIAN', 'PRODID:-//Aras 1 Yas//TR',
+        'BEGIN:VEVENT', 'UID:aras-1-yas-20261114@davet',
+        'DTSTAMP:' + stamp, 'DTSTART:' + start, 'DTEND:' + end,
+        'SUMMARY:' + escapeIcs(EVENT.name),
+        'LOCATION:' + escapeIcs(EVENT.venue + ' - ' + EVENT.address),
+        'DESCRIPTION:' + escapeIcs("Aras'ın 1. yaş kutlamasına davetlisiniz!"),
+        'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:Aras doğum günü kutlaması',
+        'TRIGGER:-PT1H', 'END:VALARM',
+        'END:VEVENT', 'END:VCALENDAR'
+      ];
+      const url = URL.createObjectURL(new Blob([lines.join('\r\n') + '\r\n'], {type:'text/calendar;charset=utf-8'}));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'aras-1-yas-dogum-gunu.ics';
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      setCalendarMenu(false);
+    });
 
     // Konfeti yalnızca dekoratif bir animasyondur; kayıt onayı değildir.
     // Harici kütüphane kullanılmaz. Hareket azaltma tercihlerine saygı gösterir.
