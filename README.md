@@ -1,2 +1,2 @@
-# Sel-uk-Aras-1-Ya-nda
+# Selçuk-Aras-1-Yaşında
 Selçuk Aras'ın Doğum Günü
