@@ -293,25 +293,279 @@
     };
     const $ = id => document.getElementById(id);
 
-    $('calendarButton').addEventListener('click', () => {
-      const start = new Date(EVENT.start).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
-      const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
-      const escapeIcs = value => value.replace(/\\/g, '\\\\').replace(/,/g, '\\,').replace(/;/g, '\\;').replace(/\n/g, '\\n');
-      const lines = [
-        'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Aras 1 Yas//TR',
-        'BEGIN:VEVENT', 'UID:aras-1-yas-20261114@davet',
-        'DTSTAMP:' + stamp, 'DTSTART:' + start,
-        'SUMMARY:' + escapeIcs(EVENT.name),
-        'LOCATION:' + escapeIcs(EVENT.venue + ' - ' + EVENT.address),
-        'DESCRIPTION:' + escapeIcs("Aras'ın 1. yaş kutlamasına davetlisiniz!"),
-        'END:VEVENT', 'END:VCALENDAR'
-      ];
-      const url = URL.createObjectURL(new Blob([lines.join('\r\n') + '\r\n'], {type:'text/calendar;charset=utf-8'}));
-      const a = document.createElement('a');
-      a.href = url; a.download = 'aras-1-yas.ics';
-      document.body.append(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 3000);
-    });
+    
+    // Google Takvim ve Apple / Telefon Takvimi seçim menüsü
+    (() => {
+      const button = $('calendarButton');
+      const picker = document.createElement('div');
+      picker.className = 'calendar-picker';
+
+      button.parentNode.insertBefore(picker, button);
+      picker.appendChild(button);
+
+      button.setAttribute('aria-expanded', 'false');
+      button.setAttribute('aria-controls', 'calendarMenu');
+
+      const menu = document.createElement('div');
+      menu.id = 'calendarMenu';
+      menu.className = 'calendar-menu';
+      menu.hidden = true;
+
+      menu.innerHTML = `
+        <p class="calendar-menu-title">Takvimini seç</p>
+        <p class="calendar-menu-desc">
+          Etkinlik bilgileri hazır gelecek.
+        </p>
+
+        <a id="googleCalendarLink"
+           class="calendar-choice"
+           target="_blank"
+           rel="noopener noreferrer">
+          <span>📅</span>
+          <span>
+            <strong>Google Takvim</strong>
+            <small>Etkinliği aç ve kaydet</small>
+          </span>
+        </a>
+
+        <button id="phoneCalendarButton"
+                class="calendar-choice"
+                type="button">
+          <span>📱</span>
+          <span>
+            <strong>Apple / Telefon Takvimi</strong>
+            <small>Takvim dosyası (.ics)</small>
+          </span>
+        </button>
+
+        <p class="calendar-menu-desc calendar-menu-note">
+          Bazı telefonlar takvim dosyasını önce indirir.
+        </p>
+      `;
+
+      picker.appendChild(menu);
+
+      // Menünün davetiye tasarımına uygun görünümü
+      const style = document.createElement('style');
+
+      style.textContent = `
+        .calendar-picker {
+          position: relative;
+          display: flex;
+        }
+
+        .calendar-menu {
+          position: absolute;
+          top: calc(100% + 12px);
+          right: 0;
+          z-index: 30;
+          width: min(350px, calc(100vw - 32px));
+          padding: 16px;
+          border: 1px solid #ecdcc8;
+          border-radius: 22px;
+          background: #fffdf9;
+          box-shadow: 0 18px 46px rgba(53,66,82,.18);
+        }
+
+        .calendar-menu[hidden] {
+          display: none;
+        }
+
+        .calendar-menu-title {
+          font-weight: 700;
+          margin: 0 0 4px;
+          color: #2f4154;
+        }
+
+        .calendar-menu-desc {
+          font-size: 13px;
+          color: #69778a;
+          margin: 0 0 12px;
+        }
+
+        .calendar-menu-note {
+          font-size: 12px;
+          margin: 12px 0 0;
+        }
+
+        .calendar-choice {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          width: 100%;
+          min-height: 64px;
+          margin-top: 9px;
+          padding: 12px 14px;
+          text-align: left;
+          text-decoration: none;
+          font: inherit;
+          color: #2f4154;
+          background: #fff;
+          border: 1px solid #e8dace;
+          border-radius: 15px;
+          box-shadow: none;
+          cursor: pointer;
+        }
+
+        .calendar-choice:hover,
+        .calendar-choice:focus-visible {
+          background: #f3f7fa;
+          border-color: #a9c9dc;
+        }
+
+        .calendar-choice > span:first-child {
+          font-size: 25px;
+        }
+
+        .calendar-choice strong,
+        .calendar-choice small {
+          display: block;
+        }
+
+        .calendar-choice strong {
+          font-size: 15px;
+        }
+
+        .calendar-choice small {
+          font-size: 12px;
+          color: #69778a;
+        }
+
+        @media (max-width: 640px) {
+          .calendar-picker {
+            width: 100%;
+          }
+
+          .calendar-picker > .btn {
+            width: 100%;
+          }
+
+          .calendar-menu {
+            left: 0;
+            right: auto;
+            width: 100%;
+          }
+        }
+      `;
+
+      document.head.appendChild(style);
+
+      // Kutlama: 14 Kasım 2026, 14.30-16.30
+      const title = 'Selçuk Aras 1 Yaşında!';
+      const start = new Date(EVENT.start);
+      const end = new Date(
+        start.getTime() + 2 * 60 * 60 * 1000
+      );
+
+      const utc = date => date.toISOString()
+        .replace(/[-:]/g, '')
+        .replace(/\.\d{3}Z$/, 'Z');
+
+      // Google Takvim bağlantısı
+      const googleUrl = new URL(
+        'https://calendar.google.com/calendar/render'
+      );
+
+      googleUrl.searchParams.set('action', 'TEMPLATE');
+      googleUrl.searchParams.set('text', title);
+      googleUrl.searchParams.set(
+        'dates',
+        utc(start) + '/' + utc(end)
+      );
+      googleUrl.searchParams.set('ctz', 'Europe/Istanbul');
+      googleUrl.searchParams.set(
+        'location',
+        EVENT.venue + ' - ' + EVENT.address
+      );
+      googleUrl.searchParams.set(
+        'details',
+        "Aras'ın 1. yaş kutlamasına davetlisiniz!"
+      );
+
+      menu.querySelector('#googleCalendarLink').href =
+        googleUrl.toString();
+
+      const closeMenu = () => {
+        menu.hidden = true;
+        button.setAttribute('aria-expanded', 'false');
+      };
+
+      // Takvim menüsünü aç/kapat
+      button.addEventListener('click', () => {
+        menu.hidden = !menu.hidden;
+        button.setAttribute(
+          'aria-expanded',
+          String(!menu.hidden)
+        );
+      });
+
+      menu.querySelector('#googleCalendarLink')
+        .addEventListener('click', closeMenu);
+
+      document.addEventListener('click', event => {
+        if (!picker.contains(event.target)) closeMenu();
+      });
+
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') closeMenu();
+      });
+
+      // Apple ve diğer telefon takvimleri için ICS
+      menu.querySelector('#phoneCalendarButton')
+        .addEventListener('click', () => {
+
+        const escapeIcs = value => String(value)
+          .replace(/\\/g, '\\\\')
+          .replace(/,/g, '\\,')
+          .replace(/;/g, '\\;')
+          .replace(/\n/g, '\\n');
+
+        const lines = [
+          'BEGIN:VCALENDAR',
+          'VERSION:2.0',
+          'CALSCALE:GREGORIAN',
+          'PRODID:-//Aras 1 Yas//TR',
+          'BEGIN:VEVENT',
+          'UID:aras-1-yas-20261114@davet',
+          'DTSTAMP:' + utc(new Date()),
+          'DTSTART:' + utc(start),
+          'DTEND:' + utc(end),
+          'SUMMARY:' + escapeIcs(title),
+          'LOCATION:' + escapeIcs(
+            EVENT.venue + ' - ' + EVENT.address
+          ),
+          'DESCRIPTION:' + escapeIcs(
+            "Aras'ın 1. yaş kutlamasına davetlisiniz!"
+          ),
+          'BEGIN:VALARM',
+          'ACTION:DISPLAY',
+          'DESCRIPTION:Doğum günü hatırlatması',
+          'TRIGGER:-PT1H',
+          'END:VALARM',
+          'END:VEVENT',
+          'END:VCALENDAR'
+        ];
+
+        const url = URL.createObjectURL(
+          new Blob(
+            [lines.join('\r\n') + '\r\n'],
+            { type: 'text/calendar;charset=utf-8' }
+          )
+        );
+
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'selcuk-aras-1-yas.ics';
+
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        closeMenu();
+      });
+    })();
+
 
     // Konfeti yalnızca dekoratif bir animasyondur; kayıt onayı değildir.
     // Harici kütüphane kullanılmaz. Hareket azaltma tercihlerine saygı gösterir.
