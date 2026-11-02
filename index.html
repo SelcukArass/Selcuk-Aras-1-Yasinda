@@ -111,10 +111,14 @@
     .btn-primary{background:linear-gradient(180deg, #e67064 0%, #d85f55 100%); color:#fff}
     .btn-secondary{background:rgba(255,252,247,.96); border-color:#e7d8c8; color:#49678f}
     /* Takvim seçim menüsü */
-    .calendar-picker{position:relative;display:flex;}
-    .calendar-picker .btn{width:100%;}
+    .calendar-picker{position:relative;display:flex;align-items:stretch;gap:8px;}
+    .calendar-picker .btn{flex:1;white-space:nowrap;}
+    .calendar-more{display:none;align-items:center;justify-content:center;flex:none;width:44px;min-height:58px;border:1px solid var(--stroke);border-radius:18px;background:#fffdf9;color:var(--blue);font-size:25px;cursor:pointer;box-shadow:0 8px 18px rgba(114,91,69,.05);}
+    .calendar-picker.android .calendar-more{display:inline-flex;}
+    .calendar-more:hover,.calendar-more:focus-visible{background:#eaf4f9;}
     .calendar-menu{position:absolute;z-index:30;top:calc(100% + 12px);right:0;width:min(350px,calc(100vw - 32px));background:#fffdf9;border:1px solid var(--stroke);border-radius:22px;padding:16px;box-shadow:0 18px 46px rgba(53,66,82,.18);text-align:left;}
     .calendar-menu[hidden]{display:none;}
+    @media (max-width: 420px){.calendar-picker.android .btn{font-size:15px;padding-inline:13px;}.calendar-picker.android .calendar-more{width:40px;min-height:54px;}}
     .calendar-menu-title{font-weight:700;color:var(--ink);margin-bottom:4px;}
     .calendar-menu-caption{font-size:13px;color:var(--muted);margin-bottom:12px;}
     .calendar-option{display:flex;align-items:center;gap:12px;width:100%;text-align:left;border:1px solid #e8dace;background:#fff;border-radius:15px;padding:12px 14px;color:var(--ink);cursor:pointer;margin-top:9px;min-height:64px;box-shadow:none;font:inherit;}
@@ -241,6 +245,7 @@
         <a class="btn btn-primary" href="https://www.google.com/maps/search/?api=1&amp;query=5inch%20Meram%20Restoran%20Hacigiden%20Sokak%2046%20Konya" target="_blank" rel="noopener noreferrer">📍 Yol Tarifi Al</a>
         <div class="calendar-picker" id="calendarPicker">
           <button class="btn btn-secondary" id="calendarButton" type="button" aria-expanded="false" aria-controls="calendarMenu" aria-haspopup="true">🗓️ Takvime Ekle</button>
+          <button class="calendar-more" id="calendarMoreButton" type="button" aria-expanded="false" aria-controls="calendarMenu" aria-haspopup="true" aria-label="Diğer takvim seçenekleri" title="Diğer takvim seçenekleri">⌄</button>
           <div class="calendar-menu" id="calendarMenu" hidden>
             <p class="calendar-menu-title">Takvimini seç</p>
             <p class="calendar-menu-caption">Kutlama bilgileri otomatik doldurulacak.</p>
@@ -328,8 +333,10 @@
     // Seçilen takvim için etkinliği hazırla. Saatler Türkiye saatidir (UTC+03:00).
     const calendarPicker = $('calendarPicker');
     const calendarButton = $('calendarButton');
+    const calendarMoreButton = $('calendarMoreButton');
     const calendarMenu = $('calendarMenu');
     const googleCalendarLink = $('googleCalendarLink');
+    const isAndroid = /Android/i.test(navigator.userAgent || '');
 
     function formatCalendarUtc(dateString) {
       return new Date(dateString).toISOString()
@@ -346,16 +353,38 @@
     googleUrl.searchParams.set('details', "Aras'ın 1. yaş kutlamasına davetlisiniz!");
     googleCalendarLink.href = googleUrl.toString();
 
-    function setCalendarMenu(open) {
-      calendarMenu.hidden = !open;
-      calendarButton.setAttribute('aria-expanded', String(open));
+    // Samsung/Android: ana buton Google Takvim'i doğrudan açar;
+    // yanındaki küçük ok ise diğer takvim seçeneklerini gösterir.
+    // iPhone ve masaüstünde ana buton önce takvim seçimini gösterir.
+    if (isAndroid) {
+      calendarPicker.classList.add('android');
+      calendarButton.textContent = '🗓️ Google Takvim’e Ekle';
+      calendarButton.removeAttribute('aria-expanded');
+      calendarButton.removeAttribute('aria-controls');
+      calendarButton.removeAttribute('aria-haspopup');
     }
 
-    calendarButton.addEventListener('click', () => {
+    function setCalendarMenu(open) {
+      calendarMenu.hidden = !open;
+      (isAndroid ? calendarMoreButton : calendarButton)
+        .setAttribute('aria-expanded', String(open));
+    }
+
+    function toggleCalendarMenu() {
       const open = calendarMenu.hidden;
       setCalendarMenu(open);
       if (open) googleCalendarLink.focus();
+    }
+
+    calendarButton.addEventListener('click', () => {
+      if (isAndroid) {
+        // Dosya indirmez: Google Takvim'in etkinlik sayfasını açar.
+        window.location.assign(googleUrl.toString());
+        return;
+      }
+      toggleCalendarMenu();
     });
+    calendarMoreButton.addEventListener('click', toggleCalendarMenu);
     googleCalendarLink.addEventListener('click', () => setCalendarMenu(false));
     document.addEventListener('click', event => {
       if (!calendarPicker.contains(event.target)) setCalendarMenu(false);
@@ -363,7 +392,7 @@
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape' && !calendarMenu.hidden) {
         setCalendarMenu(false);
-        calendarButton.focus();
+        (isAndroid ? calendarMoreButton : calendarButton).focus();
       }
     });
 
